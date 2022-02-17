@@ -1,0 +1,2 @@
+libmyencfs.so.1 libmyencfs1 #MINVER#
+* Build-Depends-Package: libmyencfs-dev

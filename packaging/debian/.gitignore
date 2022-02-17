@@ -1,0 +1,10 @@
+*-stamp
+*.substvars
+.debhelper
+autoreconf.*
+files
+libmyencfs-dev
+libmyencfs1
+myencfs
+myencfs-fuse
+tmp

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<use>
+		<flag name="bio-file">Enable bio-file support</flag>
+		<flag name="encrypt">Enable encrypt</flag>
+		<flag name="decrypt">Enable decrypt</flag>
+		<flag name="tools">Enable tools</flag>
+		<flag name="fuse">Enable fuse tools</flag>
+		<flag name="myencfs_crypto_openssl">Use dev-libs/openssl as crypto engine</flag>
+		<flag name="myencfs_crypto_mbedtls">Use net-libs/mbedtls as crypto engine</flag>
+	</use>
+	<upstream>
+		<remote-id type="github">alonbl/myencfs</remote-id>
+	</upstream>
+</pkgmetadata>

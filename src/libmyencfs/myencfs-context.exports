@@ -1,0 +1,8 @@
+myencfs_context_construct
+myencfs_context_destruct
+myencfs_context_error_reset
+myencfs_context_get_error
+myencfs_context_get_system
+myencfs_context_get_user_context
+myencfs_context_new
+myencfs_context_set_user_context

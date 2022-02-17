@@ -1,0 +1,50 @@
+Source: myencfs
+Section: utils
+Priority: optional
+Maintainer: Alon Bar-Lev <alon.barlev@gmail.com>
+Uploaders: Alon Bar-Lev <alon.barlev@gmail.com>
+Rules-Requires-Root: no
+Build-Depends: debhelper,
+               libssl-dev,
+               libfuse3-dev,
+               pkg-config
+Standards-Version: 4.6.0.2
+Homepage: https://github.com/alonbl/myencfs
+Vcs-Git: https://github.com/alonbl/myencfs.git
+Vcs-Browser: https://github.com/alonbl/myencfs.git
+
+Package: libmyencfs1
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends},
+Description: library for simple file encryption tools.
+ .
+ myencfs is a simple demo for a simple project.
+
+Package: libmyencfs-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libmyencfs1 (= ${binary:Version}), ${misc:Depends}
+Description: development files for simple file encryption tools.
+ .
+ myencfs is a simple demo for a simple project.
+
+Package: myencfs-fuse
+Architecture: any
+Multi-Arch: foreign
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: fuse3
+Description: simple file encryption fuse interface.
+ .
+ myencfs is a simple demo for a simple project.
+
+Package: myencfs
+Architecture: any
+Multi-Arch: foreign
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: simple file encryption tools.
+ .
+ myencfs is a simple demo for a simple project.

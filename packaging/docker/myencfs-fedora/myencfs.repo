@@ -1,0 +1,4 @@
+[myencfs]
+name=myencfs
+gpgcheck=0
+baseurl=file:///var/lib/dockerbuild/myencfs-repo
