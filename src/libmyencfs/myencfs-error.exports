@@ -1,0 +1,6 @@
+myencfs_error_format
+myencfs_error_format_callback
+myencfs_error_format_simple
+myencfs_error_get_key_desc
+myencfs_error_has_error
+myencfs_error_reset

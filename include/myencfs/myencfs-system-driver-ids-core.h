@@ -1,0 +1,8 @@
+#ifndef __MYENCFS_SYSTEM_PROVIDER_ID_core_H
+#define __MYENCFS_SYSTEM_PROVIDER_ID_core_H
+#define MYENCFS_SYSTEM_DRIVER_ID_core_explicit_bzero 0xfe3fc4ba
+#define MYENCFS_SYSTEM_DRIVER_ID_core_free 0x4ff88aad
+#define MYENCFS_SYSTEM_DRIVER_ID_core_realloc 0xecfbf37e
+#define MYENCFS_SYSTEM_DRIVER_ID_core_mkdir 0x90868ffd
+#define MYENCFS_SYSTEM_DRIVER_ID_core_access 0x0f12541a
+#endif

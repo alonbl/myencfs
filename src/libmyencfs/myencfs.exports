@@ -1,0 +1,12 @@
+myencfs_construct
+myencfs_destruct
+myencfs_get_context
+myencfs_get_error
+myencfs_get_md_suffix
+myencfs_get_system
+myencfs_new
+myencfs_set_base_ct
+myencfs_set_base_pt
+myencfs_set_encryption_key_id
+myencfs_set_key_callback
+myencfs_set_md_suffix

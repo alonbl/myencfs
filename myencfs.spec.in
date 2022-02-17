@@ -1,0 +1,80 @@
+Summary:	A simple filesystem encryption example
+Name:		@PACKAGE_NAME@
+Version:	@PACKAGE_VERSION@
+Release:	1%{?dist}
+Source:		%{name}-%{version}.tar.bz2
+License:	BSD
+URL:		https://github.com/alonbl/myencfs
+BuildRequires:	gcc
+BuildRequires:	make
+BuildRequires:	coreutils
+BuildRequires:	fuse3-devel
+BuildRequires:	openssl-devel
+Requires:	%{name}-libs%{?_isa} = %{version}-%{release}
+
+%description
+myencfs is a simple demo for a simple project.
+
+%package fuse
+Summary:	myencfs fuse support
+Requires:	fuse3-libs
+Requires:	%{name}-libs%{?_isa} = %{version}-%{release}
+
+%description fuse
+myencfs is a simple demo for a simple project.
+
+%package libs
+Summary:	myencfs libraries
+Requires:	openssl-libs
+
+%description libs
+myencfs is a simple demo for a simple project.
+
+%package devel
+Summary:	Files for development of applications which will use myencfs
+Requires:	%{name}-libs%{?_isa} = %{version}-%{release}
+Requires:	pkgconfig
+
+%description devel
+myencfs is a simple demo for a simple project.
+
+%prep
+%autosetup -n "%{name}-%{version}"
+
+%build
+%configure \
+	--enable-bio-file \
+	--enable-encrypt \
+	--enable-decrypt \
+	--enable-tool \
+	--enable-fuse \
+	--with-build-id="%{version}-%{release}"
+%make_build
+
+%install
+%make_install
+%ldconfig_scriptlets
+
+rm -f $RPM_BUILD_ROOT%{_libdir}/*.la
+
+%files
+%license COPYING
+%doc README.md
+%{_bindir}/myencfs-tool
+
+%files fuse
+%{_bindir}/myencfs-fuse
+
+%files libs
+%{_libdir}/*.so.*
+
+%files devel
+%dir %{_includedir}/myencfs
+%{_includedir}/myencfs/*.h
+%{_libdir}/*.a
+%{_libdir}/*.so
+%{_libdir}/pkgconfig/*.pc
+
+%changelog
+* Tue Mar 08 2022 Alon Bar-Lev <alon.barlev@gmail.com> - 0.0.0-1
+- Initial import.

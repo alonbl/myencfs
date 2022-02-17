@@ -1,0 +1,16 @@
+myencfs_system_clean
+myencfs_system_construct
+myencfs_system_destruct
+myencfs_system_driver_find
+myencfs_system_driver_register
+myencfs_system_explicit_bzero
+myencfs_system_free
+myencfs_system_get_context_size
+myencfs_system_get_error
+myencfs_system_get_userdata
+myencfs_system_init
+myencfs_system_new
+myencfs_system_realloc
+myencfs_system_set_userdata
+myencfs_system_strdup
+myencfs_system_zalloc
