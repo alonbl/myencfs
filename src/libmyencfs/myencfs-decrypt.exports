@@ -1,0 +1,5 @@
+myencfs_decrypt_bio
+myencfs_decrypt_file
+myencfs_decrypt_free_info
+myencfs_decrypt_info_bio
+myencfs_decrypt_info_file

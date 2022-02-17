@@ -1,0 +1,1252 @@
+---
+name: build
+
+#######################################
+# GITHUB WORKFLOW BAD LOG
+#
+# Cannot check cache hit, the actions/cache always extract the cache
+# No wait to share cache between branches
+# Cannot depend on matrix instance
+# Matrix instance cannot depend
+# Cannot matrix when calling workflows
+# No way to reuse matrix
+# Cannot call nested workflows
+# Cannot run workflow from a step
+# No way for a step to call step
+
+on:
+  pull_request:
+  push:
+
+env:
+  caches_version: v4
+  buildroot_ref: 2021.11.1
+  yocto_ref: honister
+
+jobs:
+
+  #############################################################################################################
+  # CACHES
+  #############################################################################################################
+
+  C-buildroot-tree:
+    name: ${{ matrix.board }}@C-openssl-binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board:
+        - qemu_x86_64
+
+    steps:
+    - name: cache
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: buildroot
+        key: buildroot-${{ env.buildroot_ref }}-${{ matrix.board }}-${{ env.caches_version }}
+    - name: dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt update
+        sudo apt install -y \
+            build-essential
+    - name: checkout
+      uses: actions/checkout@v3
+      if: steps.cache.outputs.cache-hit != 'true'
+      with:
+        repository: buildroot/buildroot
+        ref: ${{ env.buildroot_ref }}
+        path: buildroot
+    - name: configure
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: buildroot
+      run: |
+        make ${{ matrix.board }}_defconfig
+
+        cat >> .config << __EOF__
+        BR2_TARGET_ROOTFS_EXT2=n
+        BR2_TARGET_ROOTFS_TAR=y
+        BR2_LINUX_KERNEL=n
+        __EOF__
+
+        yes "" | make syncconfig
+    - name: build
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: buildroot
+      run: |
+        make
+    - name: clean
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: buildroot
+      run: |
+        rm -fr dl output/images
+        find output/build/ -type f -not -name '.*' -print0 | xargs --null rm
+
+  C-yocto-tree:
+    name: C-yocto-tree
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: cache
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: yocto
+        key: yocto-${{ env.yocto_ref }}-${{ env.caches_version }}
+    - name: dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt update
+        sudo apt install -y \
+            diffstat \
+            build-essential \
+            git
+    - name: checkout
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        mkdir yocto
+        cd yocto
+        git clone --depth 1 --branch ${{ env.yocto_ref }} git://git.yoctoproject.org/poky.git
+        git clone --depth 1 --branch ${{ env.yocto_ref }} git://git.openembedded.org/meta-openembedded
+    - name: configure
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: yocto/poky
+      run: |
+        . oe-init-build-env
+
+        cat >> conf/bblayers.conf << __EOF__
+        YOCTOROOT = "\${@os.path.abspath(os.path.join("\${TOPDIR}", os.pardir))}"
+
+        BBLAYERS += " \\
+          \${YOCTOROOT}/../meta-openembedded/meta-oe \\
+          \${YOCTOROOT}/../meta-openembedded/meta-filesystems \\
+          \${YOCTOROOT}/../meta-openembedded/meta-python \\
+          \${YOCTOROOT}/../meta-openembedded/meta-networking \\
+          "
+        __EOF__
+
+        cat >> conf/local.conf << __EOF__
+        INHERIT += " rm_work"
+        RM_OLD_IMAGE = "1"
+        MACHINE = "genericx86-64"
+        PACKAGE_CLASSES = "package_ipk"
+        IMAGE_FSTYPES="tar.gz"
+        DISTRO_FEATURES=""
+        __EOF__
+    - name: build
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: yocto/poky
+      run: |
+        . oe-init-build-env
+
+        bitbake \
+            core-image-minimal \
+            openssl \
+            mbedtls \
+            fuse3
+    - name: clean
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: yocto/poky
+      run: |
+        . oe-init-build-env
+
+        rm -fr downloads tmp
+
+  C-openssl-binaries:
+    name: ${{ matrix.version}}-${{ matrix.os }}@C-openssl-binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - version: "1.1.1"
+          os: windows
+          dependencies: mingw-w64
+          branch: OpenSSL_1_1_1-stable
+          cross-compile-prefix: x86_64-w64-mingw32-
+          target: mingw64
+        - version: "3.0"
+          os: linux
+          dependencies:
+          branch: openssl-3.0
+          cross-compile-prefix:
+          target:
+        - version: "3.0"
+          os: windows
+          dependencies: mingw-w64
+          branch: openssl-3.0
+          cross-compile-prefix: x86_64-w64-mingw32-
+          target: mingw64
+    env:
+      openssl_name: openssl-${{ matrix.version }}-binaries-${{ matrix.os }}
+
+    steps:
+    - name: cache
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.openssl_name }}
+        key: ${{ env.openssl_name }}-${{ env.caches_version }}
+    - name: dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt update
+        sudo apt install -y \
+            build-essential \
+            ${{ matrix.dependencies }}
+    - name: checkout
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/checkout@v3
+      with:
+        repository: openssl/openssl
+        ref: ${{ matrix.branch }}
+        path: openssl
+    - name: build
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: openssl
+      run: |
+        ./Configure \
+                --prefix="${GITHUB_WORKSPACE}/${{ env.openssl_name }}" \
+                --libdir=lib \
+                --cross-compile-prefix=${{ matrix.cross-compile-prefix }} \
+                ${{ matrix.target }}
+        make install_dev
+
+  C-mbedtls-binaries:
+    name: ${{ matrix.version }}-${{ matrix.os }}@C-mbedtls-binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - version: "3.1"
+          os: linux
+    env:
+      mbedtls_name: mbedtls-${{ matrix.version }}-binaries-${{ matrix.os }}
+
+    steps:
+    - name: cache
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.mbedtls_name }}
+        key: ${{ env.mbedtls_name }}-${{ env.caches_version }}
+    - name: dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt -y install \
+            build-essential
+    - name: checkout
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/checkout@v3
+      with:
+        repository: ARMmbed/mbedtls
+        ref: mbedtls-3.1.0
+        path: mbedtls
+    - name: build
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: mbedtls
+      run: |
+        make lib
+        make install DESTDIR="${GITHUB_WORKSPACE}/${{ env.mbedtls_name }}"
+
+  C-wolfssl-binaries:
+    name: ${{ matrix.version }}-${{ matrix.os }}@C-wolfssl-binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - version: "5.2"
+          os: linux
+    env:
+      wolfssl_name: wolfssl-${{ matrix.version }}-binaries-${{ matrix.os }}
+
+    steps:
+    - name: cache
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.wolfssl_name }}
+        key: ${{ env.wolfssl_name }}-${{ env.caches_version }}
+    - name: dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt -y install \
+            build-essential \
+            autotools-dev \
+            autoconf \
+            automake \
+            libtool
+    - name: checkout
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/checkout@v3
+      with:
+        repository: wolfSSL/wolfssl
+        ref: v5.2.0-stable
+        path: wolfssl
+    - name: build
+      if: steps.cache.outputs.cache-hit != 'true'
+      working-directory: wolfssl
+      run: |
+        autoreconf -ivf
+        ./configure \
+                --prefix="${GITHUB_WORKSPACE}/${{ env.wolfssl_name }}" \
+                --enable-aesgcm-stream
+        make install
+
+  #############################################################################################################
+  # SOURCES
+  #############################################################################################################
+
+  B-P-myencfs-dist:
+    name: B-P-myencfs-dist
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+                autoconf \
+                automake \
+                autotools-dev \
+                libfuse3-dev \
+                libssl-dev \
+                libtool \
+                pkg-config
+    - name: myencfs-checkout
+      uses: actions/checkout@v3
+      with:
+        path: myencfs
+    - name: myencfs-prepare
+      run: |
+        mkdir -p myencfs-build/distcheck
+    - name: myencfs-generate
+      working-directory: myencfs
+      run: |
+        autoreconf -ivf
+    - name: myencfs-distcheck
+      working-directory: myencfs-build/distcheck
+      run: |
+        "${GITHUB_WORKSPACE}/myencfs/configure"
+        make distcheck
+    - name: myencfs-dist-misc
+      run: |
+        tar -C myencfs -czf myencfs-packaging.tar.gz --transform 's#^[^/]*#myencfs-packaging#' packaging
+        tar -C myencfs -czf myencfs-tests.tar.gz --transform 's#^[^/]*#myencfs-tests#' \
+            test/myencfs-tool/test-myencfs-tool-sanity.cmd \
+            test/myencfs-tool/test-myencfs-tool-sanity.sh \
+            test/myencfs-fuse/test-myencfs-fuse-sanity.sh
+    - name: myencfs-dist-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: myencfs-dist
+        path: |
+          myencfs-build/distcheck/myencfs-*.bz2
+    - name: myencfs-misc-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: myencfs-misc
+        path: |
+          myencfs-packaging.tar.gz
+          myencfs-tests.tar.gz
+    - name: logs-upload
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: logs
+        path: |
+          **/*.log
+
+  #############################################################################################################
+  # BUILD
+  #############################################################################################################
+
+  B-generic:
+    name: ${{ matrix.os }}-${{ matrix.crypto }} (V=${{ matrix.valgrind }})@B-generic
+    needs:
+    - B-P-myencfs-dist
+    - C-openssl-binaries
+    - C-mbedtls-binaries
+    - C-wolfssl-binaries
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - windows
+        - linux
+        valgrind:
+        - 0
+        - 1
+        crypto:
+        - openssl-1.1.1
+        - openssl-3.0
+        - mbedtls-2
+        - mbedtls-3.1
+        - wolfssl-5.2
+        - bcrypt
+        exclude:
+        - os: windows
+          valgrind: 1
+        - os: windows
+          crypto: mbedtls-2
+        - os: windows
+          crypto: mbedtls-3.1
+        - os: windows
+          crypto: wolfssl-5.2
+        - os: linux
+          crypto: bcrypt
+
+    env:
+      crypto_name: ${{ matrix.crypto }}-binaries-${{ matrix.os }}
+      myencfs_name: myencfs-binaries-${{ matrix.os }}-${{ matrix.crypto }}
+
+    steps:
+    - name: env
+      run: |
+        export MYENCFS_DO_VALGRIND=0
+        export MYENCFS_COPY=
+        export MYENCFS_DEPS=
+        export MYENCFS_EXTRA_CONF=
+        export MYENCFS_HOST=
+        export MYENCFS_INSTALL=0
+        export MYENCFS_PACKAGE=0
+
+        case "${{ matrix.os }}/${{ matrix.crypto}}/${{ matrix.valgrind }}" in
+            */*/0)
+                MYENCFS_INSTALL=1
+                ;;
+            */*/1)
+                MYENCFS_DO_VALGRIND=1
+                MYENCFS_DEPS="${MYENCFS_DEPS} valgrind"
+                MYENCFS_INSTALL=0
+                ;;
+        esac
+        case "${{ matrix.os }}/${{ matrix.crypto}}/${{ matrix.valgrind }}" in
+            linux/*/*)
+                MYENCFS_DEPS="${MYENCFS_DEPS} libfuse3-dev"
+                ;;
+            windows/*/*)
+                MYENCFS_HOST="x86_64-w64-mingw32"
+                MYENCFS_DEPS="${MYENCFS_DEPS} mingw-w64"
+                MYENCFS_EXTRA_CONF="${MYENCFS_EXTRA_CONF} --disable-fuse"
+                MYENCFS_PACKAGE="1"
+                ;;
+        esac
+        case "${{ matrix.os }}/${{ matrix.crypto}}/${{ matrix.valgrind }}" in
+            linux/openssl-1.1.1/*)
+                MYENCFS_DEPS="${MYENCFS_DEPS} libssl-dev"
+                ;;
+            linux/mbedtls-2/*)
+                MYENCFS_DEPS="${MYENCFS_DEPS} libmbedtls-dev"
+                ;;
+            linux/mbedtls-3.1/*)
+                export MBEDCRYPTO_CFLAGS="-I${GITHUB_WORKSPACE}/${{ matrix.crypto }}-binaries-${{ matrix.os }}${{ matrix.crypto_version }}/include"
+                export MBEDCRYPTO_LIBS="-L${GITHUB_WORKSPACE}/${{ matrix.crypto }}-binaries-${{ matrix.os }}${{ matrix.crypto_version }}/lib -lmbedcrypto"
+                ;;
+            windows/openssl-*/*)
+                MYENCFS_COPY="bin/libcrypto-*-x64.dll"
+                ;;
+        esac
+        env | grep '^MYENCFS_' >> "${GITHUB_ENV}"
+        env | grep '.*_CFLAGS\|.*_LIBS' >> "${GITHUB_ENV}" || true
+    - name: ${{ env.crypto_name }} cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.crypto_name }}
+        key: ${{ env.crypto_name }}-${{ env.caches_version }}
+    - name: dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+            build-essential \
+            pkg-config \
+            ${MYENCFS_DEPS}
+    - name: myencfs-dist-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-dist
+        path: dist
+    - name: myencfs-prepare
+      run: |
+        tar -xf dist/myencfs-*.bz2
+        ln -s myencfs-* myencfs
+        mkdir -p myencfs-build/${{ env.myencfs_name }}-${{ matrix.valgrind }}
+    - name: myencfs-build
+      working-directory: myencfs-build/${{ env.myencfs_name }}-${{ matrix.valgrind }}
+      run: |
+        "${GITHUB_WORKSPACE}/myencfs/conf-dev.sh" \
+            --host=${MYENCFS_HOST} \
+            --with-crypto=$(echo "${{ matrix.crypto }}" | sed 's/-.*//') \
+            PKG_CONFIG_PATH="${GITHUB_WORKSPACE}/${{ env.crypto_name }}/lib/pkgconfig" \
+            ${MYENCFS_EXTRA_CONF}
+        LD_LIBRARY_PATH="${GITHUB_WORKSPACE}/${{ env.crypto_name }}/lib" \
+            make check
+        if [ "${MYENCFS_INSTALL}" = "1" ]; then
+            make install DESTDIR="${GITHUB_WORKSPACE}/${{ env.myencfs_name }}"
+        fi
+        if [ -n "${MYENCFS_COPY}" ]; then
+            cp "${GITHUB_WORKSPACE}/${{ env.crypto_name }}"/${MYENCFS_COPY} "${GITHUB_WORKSPACE}/${{ env.myencfs_name }}/usr/local/bin"
+        fi
+    - name: binaries-upload
+      if: ${{ env.MYENCFS_PACKAGE == 1 }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.myencfs_name }}
+        path: |
+          ${{ env.myencfs_name }}/usr/local
+    - name: logs-upload
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: logs
+        path: |
+          **/*.log
+
+  B-generic-wsl:
+    name: ${{ matrix.crypto }}@B-generic-wsl
+    needs:
+    - B-P-myencfs-dist
+    - C-openssl-binaries
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crypto:
+        - openssl-1.1.1
+        - openssl-3.0
+        - bcrypt
+    defaults:
+      run:
+        shell: wsl-bash {0}
+    env:
+      crypto_name: ${{ matrix.crypto }}-binaries-windows
+      myencfs_name: myencfs-binaries-windows-${{ matrix.crypto }}
+      WSLENV: GITHUB_WORKSPACE/p
+
+    steps:
+    - name: "Use GNU tar instead BSD tar"
+      # https://github.com/actions/cache/issues/591
+      shell: cmd
+      run: echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+    - name: ${{ env.crypto_name }} cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.crypto_name }}
+        key: ${{ env.crypto_name }}-${{ env.caches_version }}
+    - name: wsl-setup
+      uses: Vampire/setup-wsl@v1
+      with:
+        distribution: Ubuntu-20.04
+        additional-packages:
+          build-essential
+          mingw-w64
+          pkg-config
+        wsl-conf: |
+          [interop]
+          enabled=true
+          appendWindowsPath=false
+    - name: myencfs-dist-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-dist
+        path: dist
+    - name: myencfs-prepare
+      run: |
+        tar -xf dist/myencfs-*.bz2
+        ln -s myencfs-* myencfs
+        mkdir -p myencfs-build/${{ env.myencfs_name }}-wsl
+    - name: patch
+      working-directory: myencfs
+      run: |
+        patch -p0 < wsl-fixup-libtool-argv0.patch
+        patch -p0 < wsl-fixup-wsl1-skip-env.patch
+    - name: myencfs-build
+      env:
+        WSLENV: GITHUB_WORKSPACE/p:Path/l:LT_SKIP_ENV
+      working-directory: myencfs-build/${{ env.myencfs_name }}-wsl
+      run: |
+        # @BEGIN: WSL1 Workarounds
+        # Libtool path injection breaks runtime environment
+        export Path="$(pwd)/src/libmyencfs/.libs:${GITHUB_WORKSPACE}/${{ env.crypto_name }}/bin/:${Path}"
+        export LT_SKIP_ENV=1
+        # Absolute POSIX paths are not supported
+        export TMPDIR=.
+        # @END: WSL1 Workarounds
+
+        "${GITHUB_WORKSPACE}/myencfs/conf-dev.sh" \
+            --host=x86_64-w64-mingw32 \
+            --prefix=/ \
+            --disable-fuse \
+            --with-crypto=$(echo "${{ matrix.crypto }}" | sed 's/-.*//') \
+            PKG_CONFIG_PATH="${GITHUB_WORKSPACE}/${{ env.crypto_name }}/lib/pkgconfig" \
+            PKG_CONFIG="pkg-config --define-prefix"
+        make check
+    - name: logs-upload
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: logs
+        path: |
+          **/*.log
+
+  #############################################################################################################
+  # PACKAGING
+  #############################################################################################################
+
+  B-P-ubuntu:
+    name: B-P-ubuntu
+    needs:
+    - B-P-myencfs-dist
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:latest
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      TZ: America/New_York
+
+    steps:
+    - name: dependencies
+      run: |
+        apt update
+        apt install -y \
+                build-essential \
+                devscripts \
+                equivs
+    - name: myencfs-dist-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-dist
+        path: dist
+    - name: extract
+      run: |
+        tar -xf dist/myencfs-*.bz2
+        ln -s myencfs-* myencfs
+    - name: prepare
+      working-directory: myencfs
+      run: |
+        ln -s packaging/debian
+    - name: dependencies
+      working-directory: myencfs
+      run: |
+        mk-build-deps -i --tool="apt-get -y -o Debug::pkgProblemResolver=yes --no-install-recommends"
+    - name: build
+      working-directory: myencfs
+      run: |
+        debuild -b -uc -us -i
+    - name: create-repo
+      run: |
+        mkdir myencfs-repo
+        cp *.deb myencfs-repo
+        cd myencfs-repo
+        dpkg-scanpackages . /dev/null | gzip -9c > Packages.gz
+    - name: myencfs-deb-repo-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: myencfs-deb-repo
+        path: |
+          myencfs-repo
+
+  B-P-fedora:
+    name: B-P-fedora
+    needs:
+    - B-P-myencfs-dist
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+
+    steps:
+    - name: dependencies
+      run: |
+        dnf install -y \
+            'dnf-command(builddep)' \
+            createrepo \
+            rpm-build
+    - name: myencfs-dist-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-dist
+        path: dist
+    - name: package-sources
+      run: |
+        rpmbuild -ts dist/myencfs-*.bz2
+    - name: dependencies
+      run: |
+        dnf builddep -y --srpm ~/rpmbuild/SRPMS/*.src.rpm
+    - name: package
+      run: |
+        rpmbuild -tb --define "_rpmdir ${HOME}/rpmbuild/RPMS" dist/myencfs-*.bz2
+    - name: create-repo
+      run: |
+        mkdir myencfs-repo
+        cp -r ~/rpmbuild/RPMS/* myencfs-repo/
+        createrepo myencfs-repo
+    - name: rpmbuild-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: rpmbuild
+        path: ~/rpmbuild
+    - name: myencfs-rpm-repo-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: myencfs-rpm-repo
+        path: myencfs-repo
+
+  B-P-docker-fedora:
+    name: B-P-docker-fedora
+    needs:
+    - T-P-fedora
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: myencfs-rpm-repo-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-rpm-repo
+        path: myencfs-repo
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: prepare
+      run: |
+        tar -xf misc/myencfs-packaging.tar.gz
+        cp -r "${GITHUB_WORKSPACE}/myencfs-repo" myencfs-packaging/docker/myencfs-fedora/myencfs-repo
+    - name: docker-package
+      working-directory: myencfs-packaging/docker/myencfs-fedora
+      run: |
+        docker build --no-cache --tag myencfs-fedora:ci --progress=plain .
+    - name: myencfs-test
+      run: |
+        tar -xf misc/myencfs-tests.tar.gz
+        MYENCFS_TOOL="${GITHUB_WORKSPACE}/myencfs-packaging/docker/myencfs-fedora/myencfs-tool-wrapper.sh" \
+            ./myencfs-tests/myencfs-tool/test-myencfs-tool-sanity.sh
+
+  B-P-gentoo:
+    name: ${{ matrix.myencfs_crypto }}@B-P-gentoo
+    needs:
+    - B-P-myencfs-dist
+    runs-on: ubuntu-latest
+    container:
+      image: gentoo/stage3:latest
+      options: --privileged
+    strategy:
+      matrix:
+        myencfs_crypto:
+        - myencfs_crypto_openssl
+        - myencfs_crypto_mbedtls
+
+    steps:
+    - name: gentoo-checkout
+      uses: actions/checkout@v3
+      with:
+        repository: gentoo/gentoo
+        ref: master
+        path: gentoo
+    - name: gento-repo
+      run: |
+        ln -s "${GITHUB_WORKSPACE}/gentoo" /var/db/repos/gentoo
+    - name: myencfs-dist-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-dist
+        path: dist
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: myencfs-repo
+      run: |
+        tarball="$(ls dist/myencfs-*.tar.bz2 | xargs basename)"
+        tarname="$(echo "${tarball}" | sed 's#^\(myencfs-.*\)\.tar.*#\1#')"
+        cp "dist/${tarball}" /var/cache/distfiles
+
+        tar -xf misc/myencfs-packaging.tar.gz
+        x="myencfs-packaging/gentoo/myencfs/app-crypt/myencfs"
+        sed \
+            -e "/src_prepare/iS=\"\${WORKDIR}/${tarname}\"" \
+            -e "s#SRC_URI=.*#SRC_URI=${tarball}#" \
+            "${x}/myencfs-9999.ebuild" \
+            > "${x}/myencfs-9998.ebuild"
+        ebuild "${x}/myencfs-9998.ebuild" digest --force
+
+        for d in \
+            env \
+            package.accept_keywords \
+            package.env \
+            package.unmask \
+            package.use \
+            repos.conf \
+            ; do
+            mkdir -p "/etc/portage/${d}"
+        done
+
+        cat >> /etc/portage/repos.conf/myencfs.conf << __EOF__
+        [myencfs]
+        location = ${GITHUB_WORKSPACE}/myencfs-packaging/gentoo/myencfs
+        __EOF__
+
+        cat > /etc/portage/env/test.conf << __EOF__
+        FEATURES="test"
+        __EOF__
+
+        cat > /etc/portage/package.env/myencfs.conf << __EOF__
+        app-crypt/myencfs test.conf
+        __EOF__
+
+        cat > /etc/portage/package.accept_keywords/mbedtls.conf << __EOF__
+        net-libs/mbedtls ~amd64
+        __EOF__
+
+        cat > /etc/portage/package.unmask/mbedtls.conf << __EOF__
+        net-libs/mbedtls
+        __EOF__
+
+        cat > /etc/portage/package.accept_keywords/myencfs.conf << __EOF__
+        app-crypt/myencfs ~amd64
+        __EOF__
+
+        cat > /etc/portage/package.use/myencfs.conf << __EOF__
+        app-crypt/myencfs ${{ matrix.myencfs_crypto }} bio-file encrypt decrypt tools fuse
+        __EOF__
+    - name: build
+      run: |
+        EGIT_OVERRIDE_REPO_ALONBL_MYENCFS="${GITHUB_WORKSPACE}/myencfs" \
+            EGIT_OVERRIDE_BRANCH_ALONBL_MYENCFS="${GITHUB_REF_NAME}" \
+            EGIT_OVERRIDE_COMMIT_ALONBL_MYENCFS="${GITHUB_SHA}" \
+            emerge myencfs
+    - name: myencfs-test
+      run: |
+        tar -xf misc/myencfs-tests.tar.gz
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            ./myencfs-tests/myencfs-tool/test-myencfs-tool-sanity.sh
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            MYENCFS_FUSE=/usr/bin/myencfs-fuse \
+            FUSERMOUNT=fusermount3 \
+            ./myencfs-tests/myencfs-fuse/test-myencfs-fuse-sanity.sh
+
+  B-buildroot:
+    name: ${{ matrix.myencfs_crypto }}@B-buildroot
+    needs:
+    - C-buildroot-tree
+    - B-P-myencfs-dist
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board:
+        - qemu_x86_64
+        myencfs_crypto:
+        - crypto_openssl
+        - crypto_mbedtls
+        #- crypto_wolfssl wait for wolfssl 5.x
+
+    steps:
+    - name: buildroot-cache
+      uses: actions/cache@v3
+      with:
+        path: buildroot
+        key: buildroot-${{ env.buildroot_ref }}-${{ matrix.board }}-${{ env.caches_version }}
+    - name: myencfs-dist-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-dist
+        path: dist
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: myencfs-packaging
+      run: |
+        tar -xf misc/myencfs-packaging.tar.gz
+    - name: build
+      working-directory: buildroot
+      run: |
+        cat >> .config << __EOF__
+        BR2_PACKAGE_MYENCFS=y
+        BR2_PACKAGE_MYENCFS_$(echo ${{ matrix.myencfs_crypto }} | tr '[a-z]' '[A-Z]')=y
+        BR2_PACKAGE_MYENCFS_ENCRYPT=y
+        BR2_PACKAGE_MYENCFS_DECRYPT=y
+        BR2_PACKAGE_MYENCFS_BIO_FILE=y
+        BR2_PACKAGE_MYENCFS_TOOLS=y
+        BR2_PACKAGE_MYENCFS_FUSE=y
+        __EOF__
+
+        yes "" | make syncconfig BR2_EXTERNAL="${GITHUB_WORKSPACE}/myencfs-packaging/buildroot/myencfs"
+        make \
+            MYENCFS_SITE_METHOD=file \
+            MYENCFS_SITE="${GITHUB_WORKSPACE}/dist" \
+            MYENCFS_SOURCE="$(basename "$(ls "${GITHUB_WORKSPACE}"/dist/myencfs-*.bz2)")" \
+            MYENCFS_VERSION="tarball"
+    - name: rootfs
+      run: |
+        mkdir root
+        tar -C root -xf buildroot/output/images/rootfs.tar
+        sudo cp -a /dev/urandom /dev/fuse root/dev/
+    - name: test
+      run: |
+        tar -C root/tmp -xf misc/myencfs-tests.tar.gz
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            sudo --preserve-env=MYENCFS_TOOL \
+            chroot root /tmp/myencfs-tests/myencfs-tool/test-myencfs-tool-sanity.sh
+        FUSERMOUNT=fusermount3 \
+            MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            MYENCFS_FUSE=/usr/bin/myencfs-fuse \
+            sudo --preserve-env=MYENCFS_TOOL,MYENCFS_FUSE,FUSERMOUNT \
+            chroot root /tmp/myencfs-tests/myencfs-fuse/test-myencfs-fuse-sanity.sh
+    - name: pack
+      run: |
+        cp buildroot/output/images/rootfs.tar .
+        gzip rootfs.tar
+    - name: rootfs-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: myencfs-rootfs-buildroot-${{ matrix.board }}-${{ matrix.myencfs_crypto }}
+        path: |
+          rootfs.tar.gz
+
+  B-yocto:
+    name: ${{ matrix.board }}-${{ matrix.myencfs_crypto }}@B-yocto
+    needs:
+    - C-yocto-tree
+    - B-P-myencfs-dist
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board:
+        - genericx86-64
+        myencfs_crypto:
+        - crypto_openssl
+        - crypto_mbedtls
+        # - crypto_wolfssl wait for wolfssl 5.x
+
+    steps:
+    - name: yocto-cache
+      uses: actions/cache@v3
+      with:
+        path: yocto
+        key: yocto-${{ env.yocto_ref }}-${{ env.caches_version }}
+    - name: dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+            diffstat \
+            build-essential
+    - name: myencfs-dist-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-dist
+        path: dist
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: myencfs-packaging
+      run: |
+        tar -xf misc/myencfs-packaging.tar.gz
+    - name: build
+      working-directory: yocto/poky
+      run: |
+        tarball="$(ls "${GITHUB_WORKSPACE}/dist"/myencfs-*.tar.bz2)"
+        tarball_sha256="$(sha256sum "${tarball}" | sed 's/ .*//')"
+        tarname="$(basename "${tarball}" | sed 's#^\(myencfs-.*\)\.tar.*#\1#')"
+
+        . oe-init-build-env
+
+        cat >> conf/bblayers.conf << __EOF__
+        BBLAYERS += " \\
+          ${GITHUB_WORKSPACE}/myencfs-packaging/yocto/meta-myencfs \\
+          "
+        __EOF__
+
+        cat >> conf/local.conf << __EOF__
+        PACKAGECONFIG:append:pn-myencfs += " bio-file encrypt decrypt tools fuse ${{ matrix.myencfs_crypto }}"
+        CORE_IMAGE_EXTRA_INSTALL += " myencfs"
+        SRC_URI:pn-myencfs = "file://${tarball};sha256sum=${tarball_sha256}"
+        S:pn-myencfs = "\${WORKDIR}/${tarname}"
+        __EOF__
+
+        bitbake core-image-minimal
+    - name: pack
+      run: |
+        cp yocto/poky/build/tmp/deploy/images/${{ matrix.board }}/core-image-minimal-${{ matrix.board }}.tar.gz rootfs.tar.gz
+    - name: rootfs-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: myencfs-rootfs-yocto-${{ matrix.board }}-${{ matrix.myencfs_crypto }}
+        path: |
+          rootfs.tar.gz
+
+  P-installers-windows:
+    name: ${{ matrix.crypto }}@P-installers-windows
+    needs:
+    - T-binaries-windows
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crypto:
+        - bcrypt
+        - openssl-1.1.1
+        - openssl-3.0
+
+    steps:
+    - name: dependencies
+      run: |
+        sudo apt update
+        sudo apt install \
+            nsis
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-binaries-windows-${{ matrix.crypto }}
+        path: myencfs-binaries-windows-${{ matrix.crypto }}
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: prepare
+      run: |
+        tar -xf misc/myencfs-packaging.tar.gz
+    - name: myencfs-package
+      run: |
+        DESTDIR="myencfs-binaries-windows-${{ matrix.crypto }}" \
+            EXTRA_NAME="$(echo "${{ matrix.crypto }}" | sed -n -e 's/.*\(-.*\)/\1/p')" \
+            myencfs-packaging/windows-nsis/build
+    - name: installers-upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: myencfs-installers-windows-${{ matrix.crypto }}
+        path: |
+          myencfs-*-setup.exe
+
+  #############################################################################################################
+  # TESTS
+  #############################################################################################################
+
+  T-P-fedora:
+    name: T-P-fedora
+    needs:
+    - B-P-fedora
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+      options: --privileged
+
+    steps:
+    - name: dependencies
+      run: |
+        dnf install -y \
+            diffutils \
+            'dnf-command(config-manager)'
+    - name: myencfs-rpm-repo-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-rpm-repo
+        path: myencfs-repo
+    - name: setup-repo
+      run: |
+        cat > myencfs.repo << __EOF__
+        [myencfs]
+        name=myencfs
+        gpgcheck=0
+        baseurl=file://${GITHUB_WORKSPACE}/myencfs-repo
+        __EOF__
+        dnf config-manager --add-repo myencfs.repo
+        dnf config-manager --set-enabled myencfs
+    - name: install
+      run: |
+        dnf install -y \
+            fuse3 \
+            myencfs \
+            myencfs-fuse
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: myencfs-test
+      run: |
+        tar -xf misc/myencfs-tests.tar.gz
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            ./myencfs-tests/myencfs-tool/test-myencfs-tool-sanity.sh
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            MYENCFS_FUSE=/usr/bin/myencfs-fuse \
+            FUSERMOUNT=fusermount3 \
+            ./myencfs-tests/myencfs-fuse/test-myencfs-fuse-sanity.sh
+
+  T-P-ubuntu:
+    name: T-P-ubuntu
+    needs:
+    - B-P-ubuntu
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:latest
+      options: --privileged
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      TZ: America/New_York
+
+    steps:
+    - name: myencfs-deb-repo-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-deb-repo
+        path: myencfs-repo
+    - name: setup-repo
+      run: |
+        cat > /etc/apt/sources.list.d/myencfs.list << __EOF__
+        deb [trusted=yes] file://${GITHUB_WORKSPACE}/myencfs-repo ./
+        __EOF__
+    - name: install
+      run: |
+        apt update
+        apt install -y \
+          myencfs \
+          myencfs-fuse
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: myencfs-test
+      run: |
+        tar -xf misc/myencfs-tests.tar.gz
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            ./myencfs-tests/myencfs-tool/test-myencfs-tool-sanity.sh
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            MYENCFS_FUSE=/usr/bin/myencfs-fuse \
+            FUSERMOUNT=fusermount3 \
+            ./myencfs-tests/myencfs-fuse/test-myencfs-fuse-sanity.sh
+
+  T-rootfs:
+    name: ${{ matrix.instance }}-${{ matrix.myencfs_crypto }}@T-rootfs
+    needs:
+    - B-buildroot
+    - B-yocto
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        instance:
+        - buildroot-qemu_x86_64
+        - yocto-genericx86-64
+        myencfs_crypto:
+        - crypto_openssl
+        - crypto_mbedtls
+        # - crypto_wolfssl wait for wolfssl 5.x
+
+    steps:
+    - name: myencfs-rootfs-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-rootfs-${{ matrix.instance }}-${{ matrix.myencfs_crypto }}
+        path: rootfs
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: prepare
+      run: |
+        mkdir root
+        tar -C root -xf rootfs/rootfs.tar.gz
+        tar -C root/tmp -xf misc/myencfs-tests.tar.gz
+        sudo cp -a /dev/urandom /dev/fuse root/dev/
+    - name: test
+      run: |
+        MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            sudo --preserve-env=MYENCFS_TOOL \
+            chroot root /tmp/myencfs-tests/myencfs-tool/test-myencfs-tool-sanity.sh
+        FUSERMOUNT=fusermount3 \
+            MYENCFS_TOOL=/usr/bin/myencfs-tool \
+            MYENCFS_FUSE=/usr/bin/myencfs-fuse \
+            sudo --preserve-env=MYENCFS_TOOL,MYENCFS_FUSE,FUSERMOUNT \
+            chroot root /tmp/myencfs-tests/myencfs-fuse/test-myencfs-fuse-sanity.sh
+
+  T-binaries-windows:
+    name: ${{ matrix.crypto }}@T-binaries-windows
+    needs: B-generic
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        crypto:
+        - bcrypt
+        - openssl-1.1.1
+        - openssl-3.0
+
+    steps:
+    - name: myencfs-binaries-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-binaries-windows-${{ matrix.crypto }}
+        path: myencfs-binaries-windows-${{ matrix.crypto }}
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: prepare
+      run: |
+        tar -xf misc/myencfs-tests.tar.gz
+    - name: test
+      run: |
+        $env:MYENCFS_TOOL = "myencfs-binaries-windows-${{ matrix.crypto }}\bin\myencfs-tool.exe"
+        $p = Start-Process -FilePath myencfs-tests\myencfs-tool\test-myencfs-tool-sanity.cmd -NoNewWindow -Wait -PassThru
+        if ($p.ExitCode -ne 0) {
+            throw "FAIL"
+        }
+
+  T-P-installers-windows:
+    name: ${{ matrix.crypto }}@T-P-installers-windows
+    needs:
+    - P-installers-windows
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        crypto:
+        - bcrypt
+        - openssl-1.1.1
+        - openssl-3.0
+
+    steps:
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-installers-windows-${{ matrix.crypto }}
+    - name: myencfs-misc-download
+      uses: actions/download-artifact@v3
+      with:
+        name: myencfs-misc
+        path: misc
+    - name: prepare
+      run: |
+        tar -xf misc/myencfs-tests.tar.gz
+    - name: test
+      run: |
+        $f = Get-ChildItem myencfs-*-${{ matrix.crypto }}-setup.exe | Select-Object -First 1
+
+        $p = Start-Process -FilePath $f -Wait -Verb RunAs -PassThru -ArgumentList "/S","/SELECT_MYENCFS_TOOLS=1","/SELECT_MYENCFS_SDK=1","/D=C:\Program Files\myencfs"
+        if ($p.ExitCode -ne 0) {
+            throw "FAIL (Install)"
+        }
+
+        if (-not(Test-Path -Path "C:\Program Files\myencfs\include\myencfs\myencfs.h" -PathType Leaf)) {
+            throw "The install failed"
+        }
+
+        $env:MYENCFS_TOOL = "C:\Program Files\myencfs\bin\myencfs-tool.exe"
+        $p = Start-Process -FilePath myencfs-tests\myencfs-tool\test-myencfs-tool-sanity.cmd -NoNewWindow -Wait -PassThru
+        if ($p.ExitCode -ne 0) {
+            throw "FAIL (Sanity)"
+        }
+
+        $p = Start-Process -FilePath "C:\Program Files\myencfs\Uninstall.exe" -Wait -Verb RunAs -PassThru -ArgumentList "/S"
+        if ($p.ExitCode -ne 0) {
+            throw "FAIL (Uninstall)"
+        }
+
+        if (Test-Path -Path "C:\Program Files\myencfs\include\myencfs\myencfs.h" -PathType Leaf) {
+            throw "The uninstall failed"
+        }

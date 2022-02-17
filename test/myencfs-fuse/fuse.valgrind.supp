@@ -1,0 +1,10 @@
+{
+   fuse_opt_parse
+   Memcheck:Leak
+   match-leak-kinds: definite
+   ...
+   fun:strdup
+   ...
+   fun:fuse_opt_parse
+   fun:main
+}

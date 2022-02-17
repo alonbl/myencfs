@@ -1,0 +1,61 @@
+config BR2_PACKAGE_MYENCFS
+	bool "myencfs"
+	help
+	  A simple file encryption example.
+if BR2_PACKAGE_MYENCFS
+
+choice
+	prompt "crypto backend"
+	help
+	  Select crypto engine.
+
+config BR2_PACKAGE_MYENCFS_CRYPTO_OPENSSL
+	bool "openssl"
+	select BR2_PACKAGE_OPENSSL
+	help
+	  Use openssl as crypto engine.
+
+config BR2_PACKAGE_MYENCFS_CRYPTO_MBEDTLS
+	bool "mbedtls"
+	select BR2_PACKAGE_MBEDTLS
+	help
+	  Use mbedtls as crypto engine.
+
+config BR2_PACKAGE_MYENCFS_CRYPTO_WOLFSSL
+	bool "wolfssl"
+	select BR2_PACKAGE_WOLFSSL
+	help
+	  Use wolfssl as crypto engine.
+
+endchoice
+
+config BR2_PACKAGE_MYENCFS_ENCRYPT
+	bool "encrypt"
+	help
+	  Enable encrypt.
+
+config BR2_PACKAGE_MYENCFS_DECRYPT
+	bool "decrypt"
+	help
+	  Enable encrypt.
+
+config BR2_PACKAGE_MYENCFS_BIO_FILE
+	bool "bio-file"
+	help
+	  Enable encrypt.
+
+config BR2_PACKAGE_MYENCFS_TOOLS
+	bool "tools"
+	select BR2_PACKAGE_MYENCFS_BIO_FILE
+	help
+	  Enable tools.
+
+config BR2_PACKAGE_MYENCFS_FUSE
+	bool "fuse"
+	select BR2_PACKAGE_LIBFUSE3
+	select BR2_PACKAGE_MYENCFS_BIO_FILE
+	select BR2_PACKAGE_MYENCFS_DECRYPT
+	help
+	  Enable fuse.
+
+endif

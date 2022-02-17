@@ -1,0 +1,17 @@
+myencfs_bio_close
+myencfs_bio_construct
+myencfs_bio_control
+myencfs_bio_copy
+myencfs_bio_destruct
+myencfs_bio_get_name
+myencfs_bio_mem
+myencfs_bio_mem_buf
+myencfs_bio_mem_get_data
+myencfs_bio_mem_get_max_size
+myencfs_bio_mem_reset
+myencfs_bio_new
+myencfs_bio_null
+myencfs_bio_read
+myencfs_bio_seek
+myencfs_bio_tell
+myencfs_bio_write
