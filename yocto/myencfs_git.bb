@@ -8,6 +8,8 @@ SRC_URI = "git://github.com/alonbl/myencfs.git;protocol=https"
 SRCREV = "${AUTOREV}"
 S = "${WORKDIR}/git"
 
+inherit autotools pkgconfig
+
 # Crypto can be either openssl_crypto or mbedtls_crypto
 MYENCFS_CRYPTO ?= "crypto_openssl"
 # List of enabled features that can be overriden
