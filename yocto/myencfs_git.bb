@@ -9,7 +9,7 @@ SRCREV = "${AUTOREV}"
 S = "${WORKDIR}/git"
 
 # Crypto can be either openssl_crypto or mbedtls_crypto
-MYENCFS_CRYPTO ?= "openssl_crypto"
+MYENCFS_CRYPTO ?= "crypto_openssl"
 # List of enabled features that can be overriden
 PACKAGECONFIG ?= "tools encrypt decrypt bio-file fuse static-libs ${MYENCFS_CRYPTO}"
 
@@ -20,22 +20,22 @@ PACKAGECONFIG[decrypt]	= "--enable-decrypt"
 PACKAGECONFIG[bio-file]	= "--enable-bio-file"
 PACKAGECONFIG[test]	= "--enable-tests"
 PACKAGECONFIG[static-libs]	= "--enable-all-static"
-PACKAGECONFIG[openssl_crypto]	= " \
+PACKAGECONFIG[crypto_openssl]	= " \
 				--with-crypto=openssl, \
 				, \
 				openssl, \
 				openssl, \
 				, \
-				mbedtls_crypto \
+				crypto_mbedtls \
 				"
 
-PACKAGECONFIG[mbedtls_crypto] = " \
+PACKAGECONFIG[crypto_mbedtls] = " \
 				--with-crypto=mbed, \
 				, \
 				mbedtls, \
 				mbedtls, \
 				, \
-				openssl_crypto \
+				crypto_openssl \
 				"
 
 PACKAGECONFIG[fuse] = "--enable-fuse --enable-decrypt --enable-bio-file, \
