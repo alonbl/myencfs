@@ -11,7 +11,7 @@ S = "${WORKDIR}/git"
 # Crypto can be either openssl_crypto or mbedtls_crypto
 MYENCFS_CRYPTO ?= "openssl_crypto"
 # List of enabled features that can be overriden
-PACKAGECONFIG ?= "tools encrypt decrypt bio-file test fuse static-libs ${MYENCFS_CRYPTO}"
+PACKAGECONFIG ?= "tools encrypt decrypt bio-file fuse static-libs ${MYENCFS_CRYPTO}"
 
 
 PACKAGECONFIG[tools]	= "--enable-tool"
