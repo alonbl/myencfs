@@ -20,7 +20,6 @@ PACKAGECONFIG[tools]	= "--enable-tool"
 PACKAGECONFIG[encrypt]	= "--enable-encrypt"
 PACKAGECONFIG[decrypt]	= "--enable-decrypt"
 PACKAGECONFIG[bio-file]	= "--enable-bio-file"
-PACKAGECONFIG[test]	= "--enable-tests"
 PACKAGECONFIG[static-libs]	= "--enable-static"
 PACKAGECONFIG[crypto_openssl]	= " \
 				--with-crypto=openssl, \
