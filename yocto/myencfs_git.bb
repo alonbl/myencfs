@@ -1,8 +1,7 @@
 SUMMARY = "myencfs example application"
 DESCRIPTION="A simple directory encryption/decryption using authenticated encryption"
-LICENSE = "BSD"
-LIC_FILES_CHKSUM = "file://COPYING;md5=9859f02baa869af387514f9e5dd8cc3e \
-                    file://debian/copyright;md5=358aa3ad2f63e0c87d59d3150ef3fd7e"
+LICENSE = "BSD-3-Clause"
+LIC_FILES_CHKSUM = "file://COPYING;md5=9859f02baa869af387514f9e5dd8cc3e"
 
 SRC_URI = "git://github.com/alonbl/myencfs.git;protocol=https"
 
