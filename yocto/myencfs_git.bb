@@ -10,24 +10,23 @@ S = "${WORKDIR}/git"
 
 inherit autotools pkgconfig
 
-# Crypto can be either openssl_crypto or mbedtls_crypto
+# MYENCFS_CRYPTO can be one, and only one, of [ crypto_openssl, crypto_mbedtls, crypto_wolfssl ]
 MYENCFS_CRYPTO ?= "crypto_openssl"
 # List of enabled features that can be overriden
 PACKAGECONFIG ?= "tools encrypt decrypt bio-file fuse static-libs ${MYENCFS_CRYPTO}"
 
-
-PACKAGECONFIG[tools]	= "--enable-tool"
-PACKAGECONFIG[encrypt]	= "--enable-encrypt"
-PACKAGECONFIG[decrypt]	= "--enable-decrypt"
-PACKAGECONFIG[bio-file]	= "--enable-bio-file"
-PACKAGECONFIG[static-libs]	= "--enable-static"
+PACKAGECONFIG[tools]		= "--enable-tool -enable-bio-file, --disable-tool"
+PACKAGECONFIG[encrypt]		= "--enable-encrypt,--disable-encrypt"
+PACKAGECONFIG[decrypt]		= "--enable-decrypt, --disable-decrypt"
+PACKAGECONFIG[bio-file]		= "--enable-bio-file, --disable-bio-file"
+PACKAGECONFIG[static-libs]	= "--enable-static, --disable-static"
 PACKAGECONFIG[crypto_openssl]	= " \
 				--with-crypto=openssl, \
 				, \
 				openssl, \
 				openssl, \
 				, \
-				crypto_mbedtls \
+				crypto_mbedtls crypto_wolfssl \
 				"
 
 PACKAGECONFIG[crypto_mbedtls] = " \
@@ -36,11 +35,20 @@ PACKAGECONFIG[crypto_mbedtls] = " \
 				mbedtls, \
 				mbedtls, \
 				, \
-				crypto_openssl \
+				crypto_openssl crypto_wolfssl \
+				"
+
+PACKAGECONFIG[crypto_wolfssl] = " \
+				--with-crypto=wolfssl, \
+				, \
+				wolfssl, \
+				wolfssl, \
+				, \
+				crypto_openssl crypto_mbedtls \
 				"
 
 PACKAGECONFIG[fuse] = "--enable-fuse --enable-decrypt --enable-bio-file, \
-				, \
+				--disable-fuse, \
 				fuse3, \
 				fuse3 \
 				"
